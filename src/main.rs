@@ -7,8 +7,9 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 struct Cli {
     host: String,
+    #[structopt(default_value = "20-23,25,80,110,143,194,443,465,587,993")]
     ports: String,
-    #[structopt(short, long, default_value = "500")]
+    #[structopt(short, long, default_value = "1000")]
     timeout_ms: u64,
 }
 
@@ -69,30 +70,6 @@ fn expand_port_list(port_spec: &str) -> Vec<u16> {
         .collect()
 }
 
-fn main() {
-    let args = Cli::from_args();
-
-    let hosts = expand_hosts(&args.host).expect("No valid host specification");
-    let ports = expand_port_list(&args.ports);
-    let timeout = std::time::Duration::from_millis(args.timeout_ms);
-
-    let scan = hosts
-        .iter()
-        .map(|h| (h.clone(), ports.clone()))
-        .map(|(h, ports)| {
-            (
-                h,
-                ports
-                    .iter()
-                    .map(|p| SocketAddr::from(SocketAddrV4::new(h, *p)))
-                    .map(|a| (a.port(), test_port(&a, timeout)))
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<Vec<_>>();
-    println!("{:?}", scan);
-}
-
 #[derive(Debug)]
 enum PortState {
     Open,
@@ -105,3 +82,27 @@ fn test_port(addr: &SocketAddr, timeout: Duration) -> PortState {
         Err(_) => Closed,
     }
 }
+
+fn main() {
+    let args = Cli::from_args();
+
+    let hosts = expand_hosts(&args.host).expect("No valid host specification");
+    let ports = expand_port_list(&args.ports);
+    let timeout = std::time::Duration::from_millis(args.timeout_ms);
+
+    let scan = hosts
+        .iter()
+        .map(|h| {
+            (
+                h,
+                ports
+                    .iter()
+                    .map(|p| SocketAddr::from(SocketAddrV4::new(*h, *p)))
+                    .map(|a| (a.port(), test_port(&a, timeout)))
+                    .collect::<Vec<_>>(),
+            )
+        })
+        .collect::<Vec<_>>();
+    println!("{:?}", scan);
+}
+
