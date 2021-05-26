@@ -12,28 +12,86 @@ struct Cli {
     timeout_ms: u64,
 }
 
+#[derive(Debug)]
+enum NetworkParseError {
+    MissingAddress,
+    BadIpAddress,
+    BadNetmask,
+    InvalidNetworkSpecification,
+}
+
 /**
 Parse IP addresses with and without subnet masks
 Examples:
  192.168.1.1
  192.168.1.1/24
  */
-fn expand_hosts(host_spec: &str) -> Option<Vec<Ipv4Addr>> {
+fn expand_hosts(host_spec: &str) -> Result<Vec<Ipv4Addr>, NetworkParseError> {
     address_and_netmask_from_str(host_spec)
-        .and_then(|(addr, mask)| Some(expand_hosts_with_netmask(addr, mask)))
+        .map(|(addr, mask)| expand_hosts_with_netmask(addr, mask))
 }
 
-fn address_and_netmask_from_str(host_spec: &str) -> Option<(Ipv4Addr, u32)> {
+fn address_and_netmask_from_str(host_spec: &str) -> Result<(Ipv4Addr, u32), NetworkParseError> {
+    if host_spec.is_empty() {
+        return Err(NetworkParseError::MissingAddress);
+    }
+
     let parts = host_spec.split('/').collect::<Vec<_>>();
 
-    match parts.len() {
-        1 => Some((Ipv4Addr::from_str(parts[0]).unwrap(), 32_u32)),
-        2 => Some((
-            Ipv4Addr::from_str(parts[0]).unwrap(),
-            u32::from_str(parts[1]).unwrap(),
-        )),
-        _ => None,
+    let part_count = parts.len();
+
+    match part_count {
+        1 => {}
+        2 => {}
+        _ => return Err(NetworkParseError::InvalidNetworkSpecification),
     }
+
+    let addr = Ipv4Addr::from_str(parts[0]).map_err(|_err| NetworkParseError::BadIpAddress);
+
+    let mask = if part_count == 2 {
+        parts[1]
+            .parse::<u32>()
+            .map_err(|_err| NetworkParseError::BadNetmask)
+            .and_then(|mask| {
+                if mask > 32 {
+                    Err(NetworkParseError::BadNetmask)
+                } else {
+                    Ok(mask)
+                }
+            })
+    } else {
+        Ok(32_u32)
+    };
+
+    Ok((addr?, mask?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_address() {
+        assert_eq!(
+            address_and_netmask_from_str("192.168.1.1").unwrap(),
+            (Ipv4Addr::new(192, 168, 1, 1), 32)
+        );
+    }
+
+    #[test]
+    fn test_parse_address_and_netmask() {
+        assert_eq!(
+            address_and_netmask_from_str("192.168.1.1/24").unwrap(),
+            (Ipv4Addr::new(192, 168, 1, 1), 24)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Intended: MissingAddress")]
+    fn test_parse_missing_address() {
+        address_and_netmask_from_str("").expect("Intended");
+    }
+
 }
 
 fn expand_hosts_with_netmask(addr: Ipv4Addr, mask: u32) -> Vec<Ipv4Addr> {
@@ -104,4 +162,3 @@ fn main() {
         .collect::<Vec<_>>();
     println!("{:?}", scan);
 }
-
