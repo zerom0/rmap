@@ -1,4 +1,3 @@
-use crate::PortState::{Closed, Open};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream};
 use std::str::FromStr;
 use std::time::Duration;
@@ -78,8 +77,8 @@ enum PortState {
 
 fn test_port(addr: &SocketAddr, timeout: Duration) -> PortState {
     match TcpStream::connect_timeout(&addr, timeout) {
-        Ok(_) => Open,
-        Err(_) => Closed,
+        Ok(_) => PortState::Open,
+        Err(_) => PortState::Closed,
     }
 }
 
