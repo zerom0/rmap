@@ -1,4 +1,5 @@
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream};
+use std::ops::RangeInclusive;
 use std::str::FromStr;
 use std::time::Duration;
 use structopt::StructOpt;
@@ -66,34 +67,6 @@ fn address_and_netmask_from_str(host_spec: &str) -> Result<(Ipv4Addr, u32), Netw
     Ok((addr?, mask?))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_address() {
-        assert_eq!(
-            address_and_netmask_from_str("192.168.1.1").unwrap(),
-            (Ipv4Addr::new(192, 168, 1, 1), 32)
-        );
-    }
-
-    #[test]
-    fn test_parse_address_and_netmask() {
-        assert_eq!(
-            address_and_netmask_from_str("192.168.1.1/24").unwrap(),
-            (Ipv4Addr::new(192, 168, 1, 1), 24)
-        );
-    }
-
-    #[test]
-    #[should_panic(expected = "Intended: MissingAddress")]
-    fn test_parse_missing_address() {
-        address_and_netmask_from_str("").expect("Intended");
-    }
-
-}
-
 fn expand_hosts_with_netmask(addr: Ipv4Addr, mask: u32) -> Vec<Ipv4Addr> {
     if mask == 32 {
         vec![addr]
@@ -106,12 +79,27 @@ fn expand_hosts_with_netmask(addr: Ipv4Addr, mask: u32) -> Vec<Ipv4Addr> {
     }
 }
 
-fn expand_port_range(x: &str) -> Vec<u16> {
-    let parts: Vec<u16> = x.split('-').map(|s| u16::from_str(s).unwrap()).collect();
-    match parts.len() {
-        1 => parts,
-        2 => (parts[0]..=parts[1]).collect::<Vec<_>>(),
-        _ => vec![],
+#[derive(Debug, Clone)]
+enum PortRangeParseError {
+    InvalidRangeSpecification,
+    InvalidPortNumber,
+}
+
+fn expand_port_range(x: &str) -> Result<RangeInclusive<u16>, PortRangeParseError> {
+    let mut parts = x
+        .split('-')
+        .map(|s| s.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber))
+        .into_iter();
+
+    let from = parts
+        .next()
+        .unwrap_or(Err(PortRangeParseError::InvalidRangeSpecification));
+    let to = parts.next().unwrap_or(from.clone());
+
+    if parts.next().is_some() {
+        Err(PortRangeParseError::InvalidRangeSpecification)
+    } else {
+        Ok(from?..=to?)
     }
 }
 
@@ -123,8 +111,73 @@ Examples:
 fn expand_port_list(port_spec: &str) -> Vec<u16> {
     port_spec
         .split(',')
-        .flat_map(|p| expand_port_range(p))
+        .flat_map(|p| expand_port_range(p).unwrap())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_address_without_netmask_succeeds() {
+        assert_eq!(
+            address_and_netmask_from_str("192.168.1.1").unwrap(),
+            (Ipv4Addr::new(192, 168, 1, 1), 32)
+        );
+    }
+
+    #[test]
+    fn test_parse_address_with_netmask_succeeds() {
+        assert_eq!(
+            address_and_netmask_from_str("192.168.1.1/24").unwrap(),
+            (Ipv4Addr::new(192, 168, 1, 1), 24)
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Intended: MissingAddress")]
+    fn test_parse_missing_address_failes() {
+        address_and_netmask_from_str("").expect("Intended");
+    }
+
+    #[test]
+    fn test_expand_port_range_succeeds() {
+        assert_eq!(expand_port_range("5-9").unwrap(), 5..=9);
+    }
+
+    #[test]
+    fn test_expand_single_port_succeeds() {
+        assert_eq!(expand_port_range("23").unwrap(), 23..=23);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_expand_missing_port_fails() {
+        expand_port_range("").expect("Indended");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_expand_invalid_port_range_characters_fails() {
+        expand_port_range("5..9").expect("Indended");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_expand_half_port_range_fails() {
+        expand_port_range("5-").expect("Indended");
+    }
+
+    #[test]
+    fn test_expand_port_list_with_range_succeeds() {
+        assert_eq!(expand_port_list("1-5"), [1, 2, 3, 4, 5]);
+    }
+
+    #[test]
+    fn test_expand_port_list_with_enumeration_succeeds() {
+        assert_eq!(expand_port_list("1,2,3,4,5"), [1, 2, 3, 4, 5]);
+    }
 }
 
 #[derive(Debug)]
