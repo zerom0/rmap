@@ -18,7 +18,6 @@ enum NetworkParseError {
     MissingAddress,
     BadIpAddress,
     BadNetmask,
-    InvalidNetworkSpecification,
 }
 
 /**
@@ -37,34 +36,23 @@ fn address_and_netmask_from_str(host_spec: &str) -> Result<(Ipv4Addr, u32), Netw
         return Err(NetworkParseError::MissingAddress);
     }
 
-    let parts = host_spec.split('/').collect::<Vec<_>>();
-
-    let part_count = parts.len();
-
-    match part_count {
-        1 => {}
-        2 => {}
-        _ => return Err(NetworkParseError::InvalidNetworkSpecification),
-    }
-
-    let addr = Ipv4Addr::from_str(parts[0]).map_err(|_err| NetworkParseError::BadIpAddress);
-
-    let mask = if part_count == 2 {
-        parts[1]
-            .parse::<u32>()
-            .map_err(|_err| NetworkParseError::BadNetmask)
-            .and_then(|mask| {
-                if mask > 32 {
-                    Err(NetworkParseError::BadNetmask)
-                } else {
-                    Ok(mask)
-                }
-            })
-    } else {
-        Ok(32_u32)
+    let (ip, mask) = match host_spec.split_once("/") {
+        // Just an IP address
+        None => { (host_spec, "32") }
+        // CIDR notation IP/mask
+        Some((ip, mask)) => { (ip, mask) }
     };
 
-    Ok((addr?, mask?))
+    Ok((
+        Ipv4Addr::from_str(ip).map_err(|_err| NetworkParseError::BadIpAddress)?,
+        mask.parse::<u32>().map_err(|_err| NetworkParseError::BadNetmask)
+            .and_then(|mask| {
+                match mask {
+                    0 ..= 32 => { Ok(mask) }
+                    _ => { Err(NetworkParseError::BadNetmask) }
+                }
+            })?
+    ))
 }
 
 fn expand_hosts_with_netmask(addr: Ipv4Addr, mask: u32) -> Vec<Ipv4Addr> {
@@ -86,21 +74,14 @@ enum PortRangeParseError {
 }
 
 fn expand_port_range(x: &str) -> Result<RangeInclusive<u16>, PortRangeParseError> {
-    let mut parts = x
-        .split('-')
-        .map(|s| s.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber))
-        .into_iter();
+    let (from, to) = match x.split_once('-') {
+        None => { (x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?,
+                   x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?) }
+        Some( (x, y) ) => { (x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?,
+                             y.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?) }
+    };
 
-    let from = parts
-        .next()
-        .unwrap_or(Err(PortRangeParseError::InvalidRangeSpecification));
-    let to = parts.next().unwrap_or(from.clone());
-
-    if parts.next().is_some() {
-        Err(PortRangeParseError::InvalidRangeSpecification)
-    } else {
-        Ok(from?..=to?)
-    }
+    Ok(from..=to)
 }
 
 /**
