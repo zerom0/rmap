@@ -27,8 +27,8 @@ Examples:
  192.168.1.1/24
  */
 fn expand_hosts(host_spec: &str) -> Result<Vec<Ipv4Addr>, NetworkParseError> {
-    address_and_netmask_from_str(host_spec)
-        .map(|(addr, mask)| expand_hosts_with_netmask(addr, mask))
+    let (addr, mask) = address_and_netmask_from_str(host_spec)?;
+    Ok(expand_hosts_with_netmask(addr, mask))
 }
 
 fn address_and_netmask_from_str(host_spec: &str) -> Result<(Ipv4Addr, u32), NetworkParseError> {
