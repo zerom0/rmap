@@ -74,8 +74,10 @@ enum PortRangeParseError {
 
 fn expand_port_range(x: &str) -> Result<RangeInclusive<u16>, PortRangeParseError> {
     let (from, to) = match x.split_once('-') {
-        None => { (x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?,
-                   x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?) }
+        None => {
+            (x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?,
+             x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?) }
+        Some( ("", "") ) => { ( 1, 65535) }
         Some( (x, y) ) => {
             (x.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?,
              y.parse::<u16>().map_err(|_err| PortRangeParseError::InvalidPortNumber)?) } };
