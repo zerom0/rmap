@@ -69,7 +69,6 @@ fn expand_hosts_with_netmask(addr: Ipv4Addr, mask: u32) -> Vec<Ipv4Addr> {
 
 #[derive(Debug, Clone)]
 enum PortRangeParseError {
-    InvalidRangeSpecification,
     InvalidPortNumber,
 }
 
@@ -118,7 +117,7 @@ mod tests {
 
     #[test]
     #[should_panic(expected = "Intended: MissingAddress")]
-    fn test_parse_missing_address_failes() {
+    fn test_parse_missing_address_fails() {
         address_and_netmask_from_str("").expect("Intended");
     }
 
@@ -135,19 +134,19 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_expand_missing_port_fails() {
-        expand_port_range("").expect("Indended");
+        expand_port_range("").expect("Intended");
     }
 
     #[test]
     #[should_panic]
     fn test_expand_invalid_port_range_characters_fails() {
-        expand_port_range("5..9").expect("Indended");
+        expand_port_range("5..9").expect("Intended");
     }
 
     #[test]
     #[should_panic]
     fn test_expand_half_port_range_fails() {
-        expand_port_range("5-").expect("Indended");
+        expand_port_range("5-").expect("Intended");
     }
 
     #[test]
