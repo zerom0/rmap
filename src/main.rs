@@ -196,7 +196,7 @@ fn main() {
                     .iter()
                     .map(|p| SocketAddr::from(SocketAddrV4::new(*h, *p)))
                     .map(|a| (a.port(), test_port(&a, timeout)))
-                    .filter(|(port, state)| *state == PortState::Open)
+                    .filter(|(_port, state)| *state == PortState::Open)
                     .collect::<Vec<_>>(),
             )
         })
