@@ -129,6 +129,11 @@ mod tests {
     }
 
     #[test]
+    fn test_expand_full_range_succeeds() {
+        assert_eq!(expand_port_range("-").unwrap(), 1..=65535);
+    }
+
+    #[test]
     fn test_expand_single_port_succeeds() {
         assert_eq!(expand_port_range("23").unwrap(), 23..=23);
     }
