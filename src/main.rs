@@ -1,8 +1,10 @@
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, TcpStream};
+use std::io::ErrorKind;
+use std::net::Ipv4Addr;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
-use std::time::Duration;
 use structopt::StructOpt;
+use tokio::io;
+use crate::PortState::{Closed, Open};
 
 #[derive(Debug, StructOpt)]
 struct Cli {
@@ -171,35 +173,50 @@ mod tests {
 enum PortState {
     Open,
     Closed,
+    Timeout,
 }
 
-fn test_port(addr: &SocketAddr, timeout: Duration) -> PortState {
-    match TcpStream::connect_timeout(&addr, timeout) {
-        Ok(_) => PortState::Open,
-        Err(_) => PortState::Closed,
-    }
-}
-
-fn main() {
+#[tokio::main()]
+async fn main() {
     let args = Cli::from_args();
 
     let hosts = expand_hosts(&args.host).expect("No valid host specification");
     let ports = expand_port_list(&args.ports);
     let timeout = std::time::Duration::from_millis(args.timeout_ms);
 
-    let scan = hosts
-        .iter()
-        .map(|h| {
-            (
-                h,
-                ports
-                    .iter()
-                    .map(|p| SocketAddr::from(SocketAddrV4::new(*h, *p)))
-                    .map(|a| (a.port(), test_port(&a, timeout)))
-                    .filter(|(_port, state)| *state == PortState::Open)
-                    .collect::<Vec<_>>(),
-            )
-        })
-        .collect::<Vec<_>>();
-    println!("{:?}", scan);
+
+    let (tx, mut rx) = tokio::sync::mpsc::channel(50);
+
+    for host in hosts {
+        for port in ports.clone() {
+            let cloned_tx = tx.clone();
+            tokio::spawn(async move {
+                let address = format!("{}:{}", host.to_string(), port);
+                let port_state = tokio::select! {
+                    res = tokio::net::TcpStream::connect(&address) => match res {
+                        Ok(stream) => { drop(stream); Open },
+                        Err(_) => Closed,
+                    },
+                    _ = tokio::time::sleep(timeout) => PortState::Timeout,
+                };
+
+                cloned_tx.send((address, port_state)).await;
+            });
+        }
+    }
+
+    drop(tx);
+
+    let mut closed_ports = 0u32;
+    let mut timed_out_ports = 0u32;
+    while let Some((sa, portstate)) = rx.recv().await {
+        match portstate {
+            Open => println!("{:?} open", sa),
+            Closed => closed_ports += 1,
+            Timeout => timed_out_ports += 1,
+        }
+    }
+
+    println!("{} ports closed", closed_ports);
+    println!("{} ports timed out", timed_out_ports);
 }
