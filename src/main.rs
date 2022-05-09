@@ -1,9 +1,7 @@
-use std::io::ErrorKind;
 use std::net::Ipv4Addr;
 use std::ops::RangeInclusive;
 use std::str::FromStr;
 use structopt::StructOpt;
-use tokio::io;
 use crate::PortState::{Closed, Open};
 
 #[derive(Debug, StructOpt)]
@@ -38,7 +36,7 @@ fn address_and_netmask_from_str(host_spec: &str) -> Result<(Ipv4Addr, u32), Netw
         return Err(NetworkParseError::MissingAddress);
     }
 
-    let (ip, mask) = match host_spec.split_once("/") {
+    let (ip, mask) = match host_spec.split_once('/') {
         // Just an IP address
         None => { (host_spec, "32") }
         // CIDR notation IP/mask
@@ -191,7 +189,7 @@ async fn main() {
         for port in ports.clone() {
             let cloned_tx = tx.clone();
             tokio::spawn(async move {
-                let address = format!("{}:{}", host.to_string(), port);
+                let address = format!("{}:{}", host, port);
                 let port_state = tokio::select! {
                     res = tokio::net::TcpStream::connect(&address) => match res {
                         Ok(stream) => { drop(stream); Open },
@@ -200,7 +198,7 @@ async fn main() {
                     _ = tokio::time::sleep(timeout) => PortState::Timeout,
                 };
 
-                cloned_tx.send((address, port_state)).await;
+                cloned_tx.send((address, port_state)).await.unwrap();
             });
         }
     }
@@ -213,7 +211,7 @@ async fn main() {
         match portstate {
             Open => println!("{:?} open", sa),
             Closed => closed_ports += 1,
-            Timeout => timed_out_ports += 1,
+            PortState::Timeout => timed_out_ports += 1,
         }
     }
 
